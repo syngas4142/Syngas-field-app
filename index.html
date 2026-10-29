@@ -1040,7 +1040,7 @@ const MSAL_CONFIG = {
   cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true }
 };
 
-const GRAPH_SCOPES = ["Files.ReadWrite.All", "User.Read"];
+const GRAPH_SCOPES = ["Files.ReadWrite.All", "Sites.ReadWrite.All", "User.Read"];
 const ONEDRIVE_FOLDER = "Syngas Swiss AG/Cloud-Syngas/Rapport";
 
 let msalInstance = null;
@@ -1199,6 +1199,9 @@ async function saveToOneDrive(rapport) {
     }
   } catch(e) { console.error("OneDrive fallback exception:", e); }
 
+  // Show error detail in UI
+  const cloudStatus = document.getElementById("cloud-status");
+  if (cloudStatus) cloudStatus.textContent = "☁️ Fehlgeschlagen — siehe Konsole (F12)";
   return false;
 }
 
