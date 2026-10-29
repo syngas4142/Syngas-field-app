@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Arbeitsrapport – SYNGAS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>/*! @azure/msal-browser v2.38.3 2023-10-27 */
 "use strict";!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).msal={})}(this,(function(e){
 /*! *****************************************************************************
@@ -1128,6 +1130,81 @@ async function getMsToken() {
   }
 }
 
+function generateRapportPdf(rapport) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const h = rapport.header || {};
+  const green = [34, 139, 34];
+
+  // Header
+  doc.setFontSize(18); doc.setTextColor(...green);
+  doc.text("SYNGAS", 14, 18);
+  doc.setTextColor(0,0,0); doc.setFontSize(14);
+  doc.text("Arbeitsrapport", 42, 18);
+  doc.setFontSize(9); doc.setTextColor(100,100,100);
+  doc.text("KW " + (h.kw||"") + "  /  " + (h.jahr||""), 14, 25);
+  doc.setTextColor(0,0,0);
+
+  // Info block
+  doc.setFontSize(9);
+  const info = [
+    ["Baustelle / Kunde", h.kunde || ""],
+    ["Auftrags-Nr.", h.auftragsNr || ""],
+    ["Rapport Nr.", h.rapportNr || ""],
+    ["Distanz von / nach", (h.distanzVon||"") + " → " + (h.distanzNach||"")],
+    ["KM", h.km || ""],
+  ];
+  let y = 32;
+  info.forEach(function(row) {
+    doc.setFont(undefined, "bold"); doc.text(row[0] + ":", 14, y);
+    doc.setFont(undefined, "normal"); doc.text(String(row[1]), 65, y);
+    y += 5;
+  });
+
+  // Workers
+  const workers = rapport.workers || [];
+  workers.forEach(function(worker) {
+    y += 4;
+    doc.setFont(undefined, "bold"); doc.setFontSize(10);
+    doc.text(worker.name || "Monteur", 14, y);
+    y += 2;
+
+    const days = (worker.days || []).filter(function(d){ return d.active; });
+    if (days.length === 0) return;
+
+    doc.autoTable({
+      startY: y,
+      head: [["Tag", "Datum", "Hinfahrt", "Abreise", "Pause", "Std.", "% Zuschl.", "Auslös."]],
+      body: days.map(function(d) {
+        return [d.tag||"", d.datum||"", d.hinfahrt||"", d.abreise||"",
+                d.pause||"", d.stunden||"", d.zuschlag ? d.zuschlag+"%" : "", d.auslosung ? "✓" : ""];
+      }),
+      styles: { fontSize: 8, cellPadding: 1.5 },
+      headStyles: { fillColor: green, textColor: 255, fontStyle: "bold" },
+      margin: { left: 14, right: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 3;
+
+    if (worker.beschreibung) {
+      doc.setFont(undefined, "normal"); doc.setFontSize(8);
+      doc.text("Beschreibung: " + worker.beschreibung, 14, y, { maxWidth: 182 });
+      y += 8;
+    }
+  });
+
+  // Signatures
+  y = Math.max(y + 10, 240);
+  if (y > 270) { doc.addPage(); y = 20; }
+  doc.setFont(undefined, "normal"); doc.setFontSize(8);
+  ["Sachbearbeiter", "Syngas", "Bauherr / Kunde"].forEach(function(label, i) {
+    var x = 14 + i * 64;
+    doc.text(label, x, y);
+    doc.line(x, y + 15, x + 58, y + 15);
+  });
+
+  return doc.output("arraybuffer");
+}
+
 async function saveToOneDrive(rapport) {
   const token = await getMsToken();
   if (!token) return false;
@@ -1136,48 +1213,47 @@ async function saveToOneDrive(rapport) {
   const jahr = rapport.header.jahr || new Date().getFullYear();
   const kunde = (rapport.header.kunde || "unbekannt").replace(/[\\/:*?"<>|]/g, "-").substring(0, 40);
   const nr = rapport.header.rapportNr || rapport.id;
-  const filename = `Rapport_KW${String(kw).padStart(2,"0")}_${jahr}_${kunde}_Nr${nr}.json`;
-  const content = JSON.stringify(rapport, null, 2);
-  const headers = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+  const filename = "Rapport_KW" + String(kw).padStart(2,"0") + "_" + jahr + "_" + kunde + "_Nr" + nr + ".pdf";
 
-  // Helper: upload to a Graph API URL, creating parent folders if needed (409 = already exists is ok)
-  async function uploadToUrl(uploadUrl) {
-    // Ensure folder path exists by creating it step by step
-    const folderUrl = uploadUrl.replace(`/${filename}:/content`, "");
-    try {
-      const chk = await fetch(folderUrl, { headers: { Authorization: "Bearer " + token } });
-      if (!chk.ok && chk.status === 404) {
-        // Try to create Cloud-Syngas/Rapport folder hierarchy
-        // We just attempt the upload anyway — Graph creates intermediate folders automatically
-      }
-    } catch(e) {}
-
-    const resp = await fetch(uploadUrl, { method: "PUT", headers, body: content });
-    return resp;
+  // Generate PDF
+  let pdfBuffer;
+  try {
+    pdfBuffer = generateRapportPdf(rapport);
+  } catch(e) {
+    const cloudStatus = document.getElementById("cloud-status");
+    if (cloudStatus) cloudStatus.textContent = "❌ PDF Fehler: " + String(e).substring(0, 80);
+    return false;
   }
 
-  // Upload directly to personal OneDrive at Cloud-Syngas/Rapport
+  // Upload to shared drive: syngas-my.sharepoint.com/personal/daten_syngas_ch
+  const DRIVE_ID = "b!H9n48HkTiUG97Duba4WLRlRLcvCKNrBImx-kTa8WYaFnlo5cLBGlSYkC3uFUXvGm";
+  const remotePath = "Daten/Syngas Swiss AG/Cloud-Syngas/Rapport/" + filename;
+  const uploadUrl = "https://graph.microsoft.com/v1.0/drives/" + DRIVE_ID + "/root:/" + remotePath + ":/content";
+
   try {
-    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/Cloud-Syngas/Rapport/${filename}:/content`;
-    const resp = await fetch(uploadUrl, { method: "PUT", headers, body: content });
+    const resp = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/pdf" },
+      body: pdfBuffer
+    });
     if (resp.ok) {
-      console.log("Saved to OneDrive: Cloud-Syngas/Rapport/" + filename);
       const cloudStatus = document.getElementById("cloud-status");
       if (cloudStatus) {
-        cloudStatus.textContent = "☁️ Gespeichert: " + filename.substring(0, 35) + "…";
-        setTimeout(() => { if (cloudStatus) cloudStatus.textContent = "☁️ OneDrive aktiv"; }, 5000);
+        cloudStatus.textContent = "☁️ PDF gespeichert: " + filename.substring(0, 40) + "…";
+        setTimeout(function(){ if (cloudStatus) cloudStatus.textContent = "☁️ OneDrive aktiv"; }, 6000);
       }
       return true;
     } else {
       const errText = await resp.text();
-      console.error("OneDrive upload error", resp.status, errText);
+      const cloudStatus = document.getElementById("cloud-status");
+      if (cloudStatus) cloudStatus.textContent = "❌ " + resp.status + ": " + errText.substring(0, 120);
+      return false;
     }
-  } catch(e) { console.error("OneDrive upload exception:", e); }
-
-  // Show error detail in UI
-  const cloudStatus = document.getElementById("cloud-status");
-  if (cloudStatus) cloudStatus.textContent = "☁️ Fehlgeschlagen — siehe Konsole (F12)";
-  return false;
+  } catch(e) {
+    const cloudStatus = document.getElementById("cloud-status");
+    if (cloudStatus) cloudStatus.textContent = "❌ Exception: " + String(e).substring(0, 120);
+    return false;
+  }
 }
 
 // Patch saveRapport to also save to OneDrive when connected
