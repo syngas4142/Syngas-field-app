@@ -1156,48 +1156,23 @@ async function saveToOneDrive(rapport) {
     return resp;
   }
 
-  // Strategy 1: Search for SharePoint site "Syngas" and upload to Cloud-Syngas/Rapport there
-  try {
-    const siteResp = await fetch("https://graph.microsoft.com/v1.0/sites?search=syngas", {
-      headers: { Authorization: "Bearer " + token }
-    });
-    if (siteResp.ok) {
-      const siteData = await siteResp.json();
-      const sites = siteData.value || [];
-      // Try each site that looks like ours
-      for (const site of sites) {
-        const siteId = site.id;
-        const uploadUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/root:/Cloud-Syngas/Rapport/${filename}:/content`;
-        const resp = await uploadToUrl(uploadUrl);
-        if (resp.ok) {
-          console.log("Saved to SharePoint site:", site.displayName || site.name);
-          const cloudStatus = document.getElementById("cloud-status");
-          if (cloudStatus) {
-            cloudStatus.textContent = "☁️ Gespeichert: " + filename.substring(0, 35) + "…";
-            setTimeout(() => { if (cloudStatus) cloudStatus.textContent = "☁️ OneDrive aktiv"; }, 5000);
-          }
-          return true;
-        }
-      }
-    }
-  } catch(e) { console.warn("SharePoint site search failed:", e); }
-
-  // Strategy 2: Fallback — try personal OneDrive at Cloud-Syngas/Rapport
+  // Upload directly to personal OneDrive at Cloud-Syngas/Rapport
   try {
     const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/Cloud-Syngas/Rapport/${filename}:/content`;
-    const resp = await uploadToUrl(uploadUrl);
+    const resp = await fetch(uploadUrl, { method: "PUT", headers, body: content });
     if (resp.ok) {
+      console.log("Saved to OneDrive: Cloud-Syngas/Rapport/" + filename);
       const cloudStatus = document.getElementById("cloud-status");
       if (cloudStatus) {
-        cloudStatus.textContent = "☁️ Gespeichert (OneDrive): " + filename.substring(0, 30) + "…";
+        cloudStatus.textContent = "☁️ Gespeichert: " + filename.substring(0, 35) + "…";
         setTimeout(() => { if (cloudStatus) cloudStatus.textContent = "☁️ OneDrive aktiv"; }, 5000);
       }
       return true;
     } else {
-      const err = await resp.text();
-      console.error("OneDrive fallback error:", err);
+      const errText = await resp.text();
+      console.error("OneDrive upload error", resp.status, errText);
     }
-  } catch(e) { console.error("OneDrive fallback exception:", e); }
+  } catch(e) { console.error("OneDrive upload exception:", e); }
 
   // Show error detail in UI
   const cloudStatus = document.getElementById("cloud-status");
