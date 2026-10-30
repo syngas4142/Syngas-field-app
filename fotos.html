@@ -445,7 +445,8 @@ function renderChips(el, names, current, onPick, emptyText) {
   el.innerHTML = "";
   if (!names.length) { el.innerHTML = `<span class="chips-hint">${emptyText}</span>`; return; }
   const q = current.toLowerCase();
-  const shown = names.filter(n => !q || n.toLowerCase().includes(q));
+  const exact = names.some(n => n.toLowerCase() === q);
+  const shown = names.filter(n => !q || exact || n.toLowerCase().includes(q));
   (shown.length ? shown : names).forEach(n => {
     const b = document.createElement("button");
     b.type = "button"; b.className = "chip" + (n.toLowerCase() === q ? " active" : "");
