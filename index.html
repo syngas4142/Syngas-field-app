@@ -1130,6 +1130,17 @@ async function getMsToken() {
   }
 }
 
+function toMin(t) {
+  if (!t) return 0;
+  const p = t.split(":").map(Number);
+  return (p[0]||0)*60 + (p[1]||0);
+}
+function toTimeStr(m) {
+  if (!m || m <= 0) return "";
+  return Math.floor(m/60) + ":" + String(m%60).padStart(2,"0");
+}
+const PDF_DAY_NAMES = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+
 function generateRapportPdf(rapport) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -1137,12 +1148,13 @@ function generateRapportPdf(rapport) {
   const green = [34, 139, 34];
 
   // Header
-  doc.setFontSize(18); doc.setTextColor(...green);
+  doc.setFontSize(20); doc.setTextColor(...green);
   doc.text("SYNGAS", 14, 18);
-  doc.setTextColor(0,0,0); doc.setFontSize(14);
-  doc.text("Arbeitsrapport", 42, 18);
-  doc.setFontSize(9); doc.setTextColor(100,100,100);
+  doc.setTextColor(0,0,0); doc.setFontSize(15);
+  doc.text("Arbeitsrapport", 46, 18);
+  doc.setFontSize(9); doc.setTextColor(120,120,120);
   doc.text("KW " + (h.kw||"") + "  /  " + (h.jahr||""), 14, 25);
+  doc.setDrawColor(200,200,200); doc.line(14, 27, 196, 27);
   doc.setTextColor(0,0,0);
 
   // Info block
@@ -1150,56 +1162,97 @@ function generateRapportPdf(rapport) {
   const info = [
     ["Baustelle / Kunde", h.kunde || ""],
     ["Auftrags-Nr.", h.auftragsNr || ""],
-    ["Rapport Nr.", h.rapportNr || ""],
-    ["Distanz von / nach", (h.distanzVon||"") + " → " + (h.distanzNach||"")],
-    ["KM", h.km || ""],
+    ["Rapport Nr.", String(h.rapportNr || "")],
+    ["Distanz von / nach", (h.distanzVon||"") + (h.distanzNach ? " >> " + h.distanzNach : "")],
+    ["KM", String(h.km || "")],
   ];
-  let y = 32;
+  let y = 33;
   info.forEach(function(row) {
     doc.setFont(undefined, "bold"); doc.text(row[0] + ":", 14, y);
-    doc.setFont(undefined, "normal"); doc.text(String(row[1]), 65, y);
-    y += 5;
+    doc.setFont(undefined, "normal"); doc.text(row[1], 65, y);
+    y += 5.5;
   });
+  y += 3;
 
   // Workers
   const workers = rapport.workers || [];
   workers.forEach(function(worker) {
-    y += 4;
+    // Name
     doc.setFont(undefined, "bold"); doc.setFontSize(10);
+    doc.setTextColor(0,0,0);
     doc.text(worker.name || "Monteur", 14, y);
     y += 2;
 
     const days = (worker.days || []).filter(function(d){ return d.active; });
-    if (days.length === 0) return;
+    if (days.length === 0) { y += 4; return; }
+
+    // Calculate total
+    const totalMin = days.reduce(function(s,d){
+      return s + Math.max(0, toMin(d.ab) - toMin(d.hin) - toMin(d.pause));
+    }, 0);
 
     doc.autoTable({
       startY: y,
       head: [["Tag", "Datum", "Hinfahrt", "Abreise", "Pause", "Std.", "% Zuschl.", "Auslös."]],
-      body: days.map(function(d) {
-        return [d.tag||"", d.datum||"", d.hinfahrt||"", d.abreise||"",
-                d.pause||"", d.stunden||"", d.zuschlag ? d.zuschlag+"%" : "", d.auslosung ? "✓" : ""];
+      body: days.map(function(d, idx) {
+        const mins = Math.max(0, toMin(d.ab) - toMin(d.hin) - toMin(d.pause));
+        // Find day index from datum
+        const dayName = PDF_DAY_NAMES[idx] || "";
+        return [
+          dayName,
+          d.datum || "",
+          d.hin || "",
+          d.ab || "",
+          d.pause || "00:45",
+          toTimeStr(mins),
+          d.zuschlag ? d.zuschlag + "%" : "",
+          d.auslosung ? "✓" : ""
+        ];
       }),
-      styles: { fontSize: 8, cellPadding: 1.5 },
-      headStyles: { fillColor: green, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 1.8, halign: "center" },
+      headStyles: { fillColor: green, textColor: 255, fontStyle: "bold", halign: "center" },
+      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 28 }, 5: { cellWidth: 16 } },
       margin: { left: 14, right: 14 },
+      foot: [["", "", "", "", "Summe:", toTimeStr(totalMin), "", ""]],
+      footStyles: { fontStyle: "bold", fillColor: [245,245,245], textColor: [0,0,0] },
     });
-    y = doc.lastAutoTable.finalY + 3;
+    y = doc.lastAutoTable.finalY + 4;
 
     if (worker.beschreibung) {
-      doc.setFont(undefined, "normal"); doc.setFontSize(8);
-      doc.text("Beschreibung: " + worker.beschreibung, 14, y, { maxWidth: 182 });
-      y += 8;
+      doc.setFont(undefined, "italic"); doc.setFontSize(8); doc.setTextColor(60,60,60);
+      doc.text(worker.beschreibung, 14, y, { maxWidth: 182 });
+      y += 7;
+      doc.setTextColor(0,0,0);
     }
+    y += 3;
   });
 
+  // Gesamtsumme
+  const totalAllMin = workers.reduce(function(s,w){
+    return s + (w.days||[]).filter(function(d){return d.active;}).reduce(function(s2,d){
+      return s2 + Math.max(0, toMin(d.ab) - toMin(d.hin) - toMin(d.pause));
+    },0);
+  },0);
+  doc.setFont(undefined,"bold"); doc.setFontSize(10); doc.setTextColor(0,0,0);
+  doc.text("Gesamtsumme: " + toTimeStr(totalAllMin) + " Std.", 196, y, { align: "right" });
+  y += 10;
+
   // Signatures
-  y = Math.max(y + 10, 240);
-  if (y > 270) { doc.addPage(); y = 20; }
-  doc.setFont(undefined, "normal"); doc.setFontSize(8);
-  ["Sachbearbeiter", "Syngas", "Bauherr / Kunde"].forEach(function(label, i) {
-    var x = 14 + i * 64;
+  if (y > 220) { doc.addPage(); y = 20; }
+  const sigLabels = ["Sachbearbeiter", "Syngas", "Bauherr / Kunde"];
+  const sigKeys = ["sach", "syn", "bau"];
+  const sigs = rapport.sigs || {};
+  doc.setFont(undefined, "normal"); doc.setFontSize(8); doc.setTextColor(80,80,80);
+  sigLabels.forEach(function(label, i) {
+    var x = 14 + i * 62;
     doc.text(label, x, y);
-    doc.line(x, y + 15, x + 58, y + 15);
+    // Draw signature image if available
+    var sigData = sigs[sigKeys[i]];
+    if (sigData && sigData.length > 100) {
+      try { doc.addImage(sigData, "PNG", x, y + 2, 55, 18); } catch(e) {}
+    }
+    doc.setDrawColor(0,0,0);
+    doc.line(x, y + 22, x + 58, y + 22);
   });
 
   return doc.output("arraybuffer");
