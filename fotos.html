@@ -127,6 +127,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                transition: border-color .15s; }
 .field input:focus { outline: none; border-color: var(--blue); }
 
+/* Ordner-Chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; max-height: 128px; overflow-y: auto; }
+.chip { border: 1px solid var(--slate-300); background: var(--slate-50); color: var(--slate-700);
+        border-radius: 99px; padding: 5px 11px; font-size: 13px; cursor: pointer; }
+.chip.active { background: var(--blue-light); border-color: var(--blue); color: var(--blue); font-weight: 600; }
+.chips-hint { font-size: 11px; color: var(--slate-400); }
+.new-badge { font-size: 10px; font-weight: 700; color: var(--green); margin-left: 6px; }
+.btn-small { padding: 6px 10px; font-size: 12px; }
+
 /* Buttons */
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px;
        border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
@@ -247,15 +256,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   <div class="card" id="folder-card" style="display:none">
     <div class="card-title">Zielordner auf OneDrive</div>
     <div class="field">
-      <label>Ordner <span style="color:red">*</span></label>
-      <input id="hauptordner" placeholder="z.B. ARA Furt" autocomplete="off">
+      <label>Ordner <span style="color:red">*</span> <span id="main-new" class="new-badge"></span></label>
+      <input id="hauptordner" placeholder="Name eingeben oder unten wählen" autocomplete="off">
+      <div class="chips" id="main-chips"></div>
     </div>
     <div class="field">
-      <label>Unterordner (optional)</label>
-      <input id="unterordner" placeholder="z.B. Kiesfilter" autocomplete="off">
+      <label>Unterordner (optional) <span id="sub-new" class="new-badge"></span></label>
+      <input id="unterordner" placeholder="Name eingeben oder unten wählen" autocomplete="off">
+      <div class="chips" id="sub-chips"></div>
     </div>
-    <div style="font-size:11px;color:var(--slate-400);margin-top:4px">
-      Pfad: <span id="path-preview" style="font-weight:600">…</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
+      <div style="font-size:11px;color:var(--slate-400)">Pfad: <span id="path-preview" style="font-weight:600">…</span></div>
+      <div class="btn-row">
+        <button class="btn btn-slate btn-small" onclick="reloadFolders()">🔄</button>
+        <button class="btn btn-slate btn-small" onclick="openFolderOnline()">📂 Ordner auf OneDrive öffnen</button>
+      </div>
     </div>
   </div>
 
@@ -374,6 +389,7 @@ function showLoggedIn() {
   document.getElementById("login-prompt").style.display = "none";
   document.getElementById("folder-card").style.display = "block";
   document.getElementById("photo-card").style.display = "block";
+  reloadFolders();
 }
 function showLoginPrompt() {
   document.getElementById("login-prompt").style.display = "block";
@@ -399,16 +415,106 @@ async function getMsToken() {
   }
 }
 
-// ── PATH PREVIEW ─────────────────────────────
-function updatePathPreview() {
-  const h = document.getElementById("hauptordner").value.trim();
-  const u = document.getElementById("unterordner").value.trim();
-  let path = "Fotos/" + (h || "…");
-  if (u) path += "/" + u;
-  document.getElementById("path-preview").textContent = path;
+// ── ORDNERAUSWAHL ───────────────────────────
+const GRAPH = `https://graph.microsoft.com/v1.0/drives/${DRIVE_ID}`;
+const BASE_LABEL = BASE_PATH.split("/").pop();
+const FOLDER_STORE = "syngas-fotos-ordner";
+const $f = id => document.getElementById(id);
+const encPath = parts => parts.filter(Boolean).map(encodeURIComponent).join("/");
+const baseParts = () => BASE_PATH.split("/");
+const folderParts = () => [$f("hauptordner").value.trim(), $f("unterordner").value.trim()].filter(Boolean);
+let mainFolders = [], subFolders = [], subFor = null, subTimer = null;
+
+async function listFolders(parts) {
+  const token = await getMsToken();
+  if (!token) return [];
+  const resp = await fetch(`${GRAPH}/root:/${encPath(parts)}:/children?$select=name,folder&$top=999`,
+    { headers: { Authorization: "Bearer " + token } });
+  if (resp.status === 404) return [];
+  if (!resp.ok) throw new Error(resp.status);
+  const j = await resp.json();
+  return (j.value || []).filter(i => i.folder).map(i => i.name).sort((a, b) => a.localeCompare(b, "de"));
 }
-document.getElementById("hauptordner").addEventListener("input", updatePathPreview);
-document.getElementById("unterordner").addEventListener("input", updatePathPreview);
+async function reloadFolders() {
+  $f("main-chips").innerHTML = '<span class="chips-hint">Ordner werden geladen…</span>';
+  try { mainFolders = await listFolders(baseParts()); }
+  catch (e) { mainFolders = []; $f("main-chips").innerHTML = `<span class="chips-hint">Ordnerliste nicht lesbar (${e.message})</span>`; return; }
+  subFor = null; renderMainChips(); await refreshSub();
+}
+function renderChips(el, names, current, onPick, emptyText) {
+  el.innerHTML = "";
+  if (!names.length) { el.innerHTML = `<span class="chips-hint">${emptyText}</span>`; return; }
+  const q = current.toLowerCase();
+  const shown = names.filter(n => !q || n.toLowerCase().includes(q));
+  (shown.length ? shown : names).forEach(n => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip" + (n.toLowerCase() === q ? " active" : "");
+    b.textContent = n; b.onclick = () => onPick(n); el.appendChild(b);
+  });
+}
+function renderMainChips() {
+  const v = $f("hauptordner").value.trim();
+  renderChips($f("main-chips"), mainFolders, v, n => { $f("hauptordner").value = n; $f("unterordner").value = ""; onFolderInput(); },
+    "Noch keine Ordner vorhanden. Name eingeben, der Ordner wird beim Speichern erstellt.");
+  $f("main-new").textContent = v && !mainFolders.some(n => n.toLowerCase() === v.toLowerCase()) ? "NEU" : "";
+}
+async function refreshSub() {
+  const h = $f("hauptordner").value.trim();
+  const real = mainFolders.find(n => n.toLowerCase() === h.toLowerCase());
+  if (!h || !real) { subFolders = []; subFor = null; renderSubChips(); return; }
+  if (subFor !== real) {
+    subFor = real;
+    $f("sub-chips").innerHTML = '<span class="chips-hint">Unterordner werden geladen…</span>';
+    try { subFolders = await listFolders([...baseParts(), real]); } catch (_) { subFolders = []; }
+  }
+  renderSubChips();
+}
+function renderSubChips() {
+  const v = $f("unterordner").value.trim();
+  if (!$f("hauptordner").value.trim()) { $f("sub-chips").innerHTML = ""; $f("sub-new").textContent = ""; return; }
+  renderChips($f("sub-chips"), subFolders, v, n => { $f("unterordner").value = n; onSubInput(); }, "Keine Unterordner vorhanden.");
+  $f("sub-new").textContent = v && !subFolders.some(n => n.toLowerCase() === v.toLowerCase()) ? "NEU" : "";
+}
+function saveFolderChoice() {
+  try { localStorage.setItem(FOLDER_STORE, JSON.stringify({ h: $f("hauptordner").value, u: $f("unterordner").value })); } catch (_) {}
+}
+function updatePathPreview() {
+  const p = folderParts();
+  $f("path-preview").textContent = BASE_LABEL + "/" + (p.length ? p.join("/") : "…");
+}
+function onFolderInput() {
+  renderMainChips(); updatePathPreview(); saveFolderChoice();
+  clearTimeout(subTimer); subTimer = setTimeout(refreshSub, 300);
+}
+function onSubInput() { renderSubChips(); updatePathPreview(); saveFolderChoice(); }
+$f("hauptordner").addEventListener("input", onFolderInput);
+$f("unterordner").addEventListener("input", onSubInput);
+try {
+  const s = JSON.parse(localStorage.getItem(FOLDER_STORE) || "{}");
+  if (s.h) $f("hauptordner").value = s.h;
+  if (s.u) $f("unterordner").value = s.u;
+} catch (_) {}
+
+async function openFolderOnline() {
+  const w = window.open("", "_blank");   // sofort öffnen, sonst blockiert iOS das Popup
+  const token = await getMsToken();
+  if (!token) { if (w) w.close(); alert("Kein Zugriffs-Token. Bitte erneut anmelden."); return; }
+  const parts = [...baseParts(), ...folderParts()];
+  let note = "";
+  while (parts.length >= baseParts().length - 1) {
+    const resp = await fetch(`${GRAPH}/root:/${encPath(parts)}?$select=webUrl`, { headers: { Authorization: "Bearer " + token } });
+    if (resp.ok) {
+      const j = await resp.json();
+      if (w) w.location.href = j.webUrl; else window.location.href = j.webUrl;
+      if (note) setTimeout(() => alert(note), 300);
+      return;
+    }
+    note = "Der gewählte Ordner existiert noch nicht. Er wird beim ersten Speichern erstellt. Geöffnet wurde der übergeordnete Ordner.";
+    parts.pop();
+  }
+  if (w) w.close();
+  alert("Ordner auf OneDrive nicht gefunden.");
+}
 
 // ── PHOTO MANAGEMENT ─────────────────────────
 let photos = []; // [{id, name, dataUrl, blob, annotatedBlob|null}]
@@ -554,6 +660,8 @@ async function uploadAll() {
   if (!err) {
     photos = [];
     renderGrid();
+    if (!mainFolders.some(n => n.toLowerCase() === hauptordner.toLowerCase())) reloadFolders();
+    else { subFor = null; refreshSub(); }
     setTimeout(() => { btn.textContent = "☁️ Auf OneDrive speichern"; }, 2500);
   }
 }
