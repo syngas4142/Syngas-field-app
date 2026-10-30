@@ -1330,4 +1330,45 @@ async function saveToOneDrive(rapport) {
       if (cloudStatus) cloudStatus.textContent = "❌ " + resp.status + ": " + errText.substring(0, 120);
       return false;
     }
-  } catc
+  } catch(e) {
+    const cloudStatus = document.getElementById("cloud-status");
+    if (cloudStatus) cloudStatus.textContent = "❌ Exception: " + String(e).substring(0, 120);
+    return false;
+  }
+}
+
+// Patch saveRapport to also save to OneDrive when connected
+const _origSaveRapport = saveRapport;
+saveRapport = async function() {
+  _origSaveRapport();
+  if (msAccount) {
+    setStatus("Speichern auf OneDrive…");
+    const h = getHeader();
+    const id = currentId || ("r_" + Date.now());
+    const sigs = { sach: getSigData("sig-sach"), syn: getSigData("sig-syn"), bau: getSigData("sig-bau") };
+    const data = { id, header: h, workers, sigs, savedAt: new Date().toISOString() };
+    try {
+      const ok = await saveToOneDrive(data);
+      if (ok) {
+        setStatus("Gespeichert lokal + OneDrive ✓");
+      } else {
+        setStatus("Lokal gespeichert — OneDrive fehlgeschlagen ⚠️");
+      }
+    } catch(e) {
+      setStatus("Lokal gespeichert — OneDrive: " + e.message);
+    }
+  }
+};
+
+document.addEventListener("DOMContentLoaded", function() {
+  initMsal();
+});
+</script>
+
+<style>
+  .print-only { display: none; }
+  @media print { .print-only { display: block; } }
+</style>
+
+</body>
+</html>
