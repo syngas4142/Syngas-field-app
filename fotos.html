@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fotos – SYNGAS</title>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"
+        crossorigin="anonymous"></script>
+<style>
+:root {
+  --green: #22a94a; --green-dark: #1a7f38;
+  --blue: #2563eb; --blue-light: #dbeafe;
+  --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+  --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
+  --red: #ef4444; --shadow: 0 2px 8px rgba(0,0,0,.08); --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+       background: var(--slate-100); color: var(--slate-800); min-height: 100vh; }
+
+/* ── TOPBAR ── */
+.topbar { background: white; border-bottom: 1px solid var(--slate-200);
+          padding: 10px 16px; display: flex; align-items: center;
+          justify-content: space-between; gap: 12px; box-shadow: var(--shadow); }
+.logo-wrap { display: flex; align-items: center; gap: 8px; }
+.logo-text { font-size: 20px; font-weight: 900; color: var(--green); }
+.app-title { font-size: 16px; font-weight: 700; color: var(--slate-700); }
+.back-link { font-size: 12px; color: var(--slate-400); text-decoration: none; }
+.back-link:hover { color: var(--green); }
+
+/* Auth */
+#auth-bar { background: #f0fdf4; border-bottom: 1px solid #bbf7d0;
+            padding: 8px 16px; display: flex; align-items: center;
+            justify-content: space-between; font-size: 13px; }
+#auth-bar.hidden { display: none; }
+.auth-user { display: flex; align-items: center; gap: 8px; }
+.auth-avatar { width: 28px; height: 28px; border-radius: 50%;
+               background: var(--green); color: white;
+               display: flex; align-items: center; justify-content: center;
+               font-weight: 700; font-size: 12px; }
+#cloud-status { font-size: 12px; color: var(--slate-500); }
+.btn-link { background: none; border: none; cursor: pointer; color: var(--slate-500);
+            font-size: 12px; text-decoration: underline; }
+
+/* ── LAYOUT ── */
+.container { max-width: 700px; margin: 0 auto; padding: 16px; }
+.card { background: white; border-radius: var(--radius);
+        box-shadow: var(--shadow); padding: 16px; margin-bottom: 12px; }
+.card-title { font-size: 13px; font-weight: 700; color: var(--slate-500);
+              text-transform: uppercase; letter-spacing: .04em; margin-bottom: 12px; }
+
+/* Fields */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field label { font-size: 12px; color: var(--slate-500); font-weight: 600; }
+.field input { border: 1px solid var(--slate-300); border-radius: 6px;
+               padding: 8px 10px; font-size: 14px; color: var(--slate-800);
+               transition: border-color .15s; }
+.field input:focus { outline: none; border-color: var(--blue); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px;
+       border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+       cursor: pointer; transition: background .15s; }
+.btn-green { background: var(--green); color: white; }
+.btn-green:hover { background: var(--green-dark); }
+.btn-blue { background: var(--blue); color: white; }
+.btn-blue:hover { background: #1d4ed8; }
+.btn-slate { background: var(--slate-200); color: var(--slate-700); }
+.btn-slate:hover { background: var(--slate-300); }
+.btn-red { background: var(--red); color: white; }
+.btn-red:hover { background: #dc2626; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── PHOTO GRID ── */
+#photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+              gap: 10px; min-height: 60px; }
+#photo-grid:empty::after { content: "Noch keine Fotos ausgewählt";
+  color: var(--slate-400); font-size: 13px; display: flex;
+  align-items: center; justify-content: center; width: 100%; }
+
+.thumb-wrap { position: relative; border-radius: 8px; overflow: hidden;
+              aspect-ratio: 1; background: var(--slate-200); }
+.thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-btn { position: absolute; width: 28px; height: 28px; border-radius: 50%;
+             border: none; cursor: pointer; font-size: 14px;
+             display: flex; align-items: center; justify-content: center;
+             box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.thumb-edit { top: 4px; left: 4px; background: rgba(255,255,255,.9); color: var(--blue); }
+.thumb-del  { top: 4px; right: 4px; background: rgba(255,255,255,.9); color: var(--red); }
+.thumb-edited { position: absolute; bottom: 4px; left: 4px;
+                background: var(--blue); color: white; font-size: 10px;
+                font-weight: 700; padding: 1px 6px; border-radius: 99px; }
+
+/* ── UPLOAD STATUS ── */
+#upload-log { max-height: 180px; overflow-y: auto; }
+.log-item { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+            border-bottom: 1px solid var(--slate-100); font-size: 12px; }
+.log-ok   { color: var(--green); }
+.log-err  { color: var(--red); }
+.log-wait { color: var(--slate-400); }
+
+/* ── LOGIN PROMPT ── */
+#login-prompt { text-align: center; padding: 32px 16px; }
+#login-prompt p { color: var(--slate-500); margin-bottom: 16px; font-size: 14px; }
+
+/* ── ANNOTATION MODAL ── */
+#annotate-modal {
+  display: none; position: fixed; inset: 0; z-index: 1000;
+  background: #000; flex-direction: column;
+}
+#annotate-modal.open { display: flex; }
+
+#annotate-canvas {
+  flex: 1; width: 100%; object-fit: contain; touch-action: none;
+  cursor: crosshair; display: block; max-height: calc(100vh - 110px);
+}
+
+.annotate-toolbar {
+  background: rgba(0,0,0,.85); padding: 10px 12px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.tool-btn {
+  background: rgba(255,255,255,.15); border: 2px solid transparent;
+  border-radius: 8px; padding: 7px 12px; color: white; cursor: pointer;
+  font-size: 15px; transition: all .15s;
+}
+.tool-btn.active { border-color: var(--green); background: rgba(34,169,74,.3); }
+.tool-btn:hover  { background: rgba(255,255,255,.25); }
+
+.color-swatch {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+  cursor: pointer; transition: border-color .15s; flex-shrink: 0;
+}
+.color-swatch.active { border-color: white; transform: scale(1.15); }
+
+.size-slider { -webkit-appearance: none; width: 70px; height: 4px;
+               border-radius: 2px; background: rgba(255,255,255,.3);
+               outline: none; cursor: pointer; }
+.size-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px;
+  border-radius: 50%; background: white; cursor: pointer; }
+
+.annotate-toolbar .spacer { flex: 1; }
+
+.annotate-actions { display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo-wrap">
+    <span class="logo-text">SYN<span style="color:#1a7f38">GAS</span></span>
+    <span class="app-title">Fotos</span>
+  </div>
+  <a href="index.html" class="back-link">← Übersicht</a>
+</div>
+
+<!-- AUTH BAR -->
+<div id="auth-bar" class="hidden">
+  <div class="auth-user">
+    <div class="auth-avatar" id="auth-avatar">?</div>
+    <span id="auth-name">–</span>
+    <span id="cloud-status"></span>
+  </div>
+  <button class="btn-link" onclick="signOut()">Abmelden</button>
+</div>
+
+<!-- MAIN -->
+<div class="container">
+
+  <!-- Login prompt -->
+  <div id="login-prompt" class="card">
+    <p>Mit Microsoft-Konto anmelden, um Fotos auf OneDrive zu speichern.</p>
+    <button class="btn btn-blue" onclick="signIn()">🔐 Mit Microsoft anmelden</button>
+  </div>
+
+  <!-- Folder card -->
+  <div class="card" id="folder-card" style="display:none">
+    <div class="card-title">Zielordner auf OneDrive</div>
+    <div class="field">
+      <label>Ordner <span style="color:red">*</span></label>
+      <input id="hauptordner" placeholder="z.B. ARA Furt" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Unterordner (optional)</label>
+      <input id="unterordner" placeholder="z.B. Kiesfilter" autocomplete="off">
+    </div>
+    <div style="font-size:11px;color:var(--slate-400);margin-top:4px">
+      Pfad: <span id="path-preview" style="font-weight:600">…</span>
+    </div>
+  </div>
+
+  <!-- Photo selection card -->
+  <div class="card" id="photo-card" style="display:none">
+    <div class="card-title">Fotos</div>
+    <div class="btn-row" style="margin-bottom:14px">
+      <button class="btn btn-slate" onclick="document.getElementById('file-input').click()">
+        🖼️ Aus Galerie wählen
+      </button>
+      <button class="btn btn-slate" onclick="document.getElementById('camera-input').click()">
+        📷 Foto aufnehmen
+      </button>
+    </div>
+    <input type="file" id="file-input"   accept="image/*" multiple hidden>
+    <input type="file" id="camera-input" accept="image/*" capture="camera" hidden>
+
+    <div id="photo-grid"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+      <span id="photo-count" style="font-size:12px;color:var(--slate-500)">0 Fotos</span>
+      <button class="btn btn-green" id="upload-btn" onclick="uploadAll()" disabled>
+        ☁️ Auf OneDrive speichern
+      </button>
+    </div>
+  </div>
+
+  <!-- Upload log -->
+  <div class="card" id="log-card" style="display:none">
+    <div class="card-title">Upload-Status</div>
+    <div id="upload-log"></div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ═══════════════════════════════════════════
+     ANNOTATION MODAL
+═══════════════════════════════════════════ -->
+<div id="annotate-modal">
+  <canvas id="annotate-canvas"></canvas>
+
+  <div class="annotate-toolbar">
+    <!-- Tools -->
+    <button class="tool-btn active" id="tool-pen"   onclick="setTool('pen')"  title="Stift">✏️</button>
+    <button class="tool-btn"        id="tool-arrow" onclick="setTool('arrow')" title="Pfeil">➡️</button>
+    <button class="tool-btn"        id="tool-rect"  onclick="setTool('rect')"  title="Rechteck">⬜</button>
+    <button class="tool-btn"        id="tool-text"  onclick="setTool('text')"  title="Text">T</button>
+
+    <div style="width:1px;height:24px;background:rgba(255,255,255,.2);margin:0 4px"></div>
+
+    <!-- Colors -->
+    <div class="color-swatch active" style="background:#ff2020" onclick="setColor('#ff2020',this)"></div>
+    <div class="color-swatch" style="background:#ffee00" onclick="setColor('#ffee00',this)"></div>
+    <div class="color-swatch" style="background:#00e640" onclick="setColor('#00e640',this)"></div>
+    <div class="color-swatch" style="background:#1e90ff" onclick="setColor('#1e90ff',this)"></div>
+    <div class="color-swatch" style="background:#ffffff" onclick="setColor('#ffffff',this)"></div>
+    <div class="color-swatch" style="background:#000000;border:1px solid #555" onclick="setColor('#000000',this)"></div>
+
+    <div style="width:1px;height:24px;background:rgba(255,255,255,.2);margin:0 4px"></div>
+
+    <!-- Stroke size -->
+    <span style="color:white;font-size:12px">⬤</span>
+    <input type="range" class="size-slider" id="size-slider" min="1" max="20" value="4"
+           oninput="lineWidth=+this.value">
+
+    <div class="spacer"></div>
+
+    <!-- Actions -->
+    <div class="annotate-actions">
+      <button class="tool-btn" onclick="undoAnnotation()" title="Rückgängig">↩️</button>
+      <button class="tool-btn" onclick="clearAnnotation()" title="Alles löschen" style="color:#ff6060">🗑️</button>
+      <button class="tool-btn" onclick="cancelAnnotation()" title="Abbrechen">✖</button>
+      <button class="tool-btn active" onclick="confirmAnnotation()" title="Speichern" style="color:#00e640">✔</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCRIPT
+═══════════════════════════════════════════ -->
+<script>
+// ── MSAL CONFIG ──────────────────────────────
+const MSAL_CONFIG = {
+  auth: {
+    clientId: "7d6d0dd2-0f0a-42a1-8539-1c76983de8e1",
+    authority: "https://login.microsoftonline.com/1e0ea1ca-4420-4e65-9ae1-d87b6eda0e0a",
+    redirectUri: window.location.href.split("?")[0].split("#")[0]
+  },
+  cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true }
+};
+const GRAPH_SCOPES = ["Files.ReadWrite.All", "Sites.ReadWrite.All", "User.Read"];
+const DRIVE_ID = "b!H9n48HkTiUG97Duba4WLRlRLcvCKNrBImx-kTa8WYaFnlo5cLBGlSYkC3uFUXvGm";
+const BASE_PATH = "Daten/Syngas Swiss AG/Cloud-Syngas/Fotos";
+
+let msalApp = null;
+let msAccount = null;
+
+// ── MSAL INIT ────────────────────────────────
+async function initMsal() {
+  try {
+    msalApp = new msal.PublicClientApplication(MSAL_CONFIG);
+    await msalApp.initialize();
+    const result = await msalApp.handleRedirectPromise();
+    if (result && result.account) {
+      msAccount = result.account;
+    } else {
+      const accounts = msalApp.getAllAccounts();
+      if (accounts.length) msAccount = accounts[0];
+    }
+    if (msAccount) showLoggedIn();
+    else showLoginPrompt();
+  } catch(e) {
+    console.error("MSAL init error:", e);
+    showLoginPrompt();
+  }
+}
+
+function showLoggedIn() {
+  const name = msAccount.name || msAccount.username;
+  document.getElementById("auth-bar").classList.remove("hidden");
+  document.getElementById("auth-name").textContent = name;
+  document.getElementById("auth-avatar").textContent = name.charAt(0).toUpperCase();
+  document.getElementById("login-prompt").style.display = "none";
+  document.getElementById("folder-card").style.display = "block";
+  document.getElementById("photo-card").style.display = "block";
+}
+function showLoginPrompt() {
+  document.getElementById("login-prompt").style.display = "block";
+  document.getElementById("folder-card").style.display = "none";
+  document.getElementById("photo-card").style.display = "none";
+}
+function signIn() {
+  msalApp.loginRedirect({ scopes: GRAPH_SCOPES });
+}
+function signOut() {
+  msalApp.logout({ account: msAccount });
+}
+async function getMsToken() {
+  try {
+    const r = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: msAccount });
+    return r.accessToken;
+  } catch(e) {
+    try {
+      const r = await msalApp.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      return r.accessToken;
+    } catch(e2) { return null; }
+  }
+}
+
+// ── PATH PREVIEW ─────────────────────────────
+function updatePathPreview() {
+  const h = document.getElementById("hauptordner").value.trim();
+  const u = document.getElementById("unterordner").value.trim();
+  let path = "Fotos/" + (h || "…");
+  if (u) path += "/" + u;
+  document.getElementById("path-preview").textContent = path;
+}
+document.getElementById("hauptordner").addEventListener("input", updatePathPreview);
+document.getElementById("unterordner").addEventListener("input", updatePathPreview);
+
+// ── PHOTO MANAGEMENT ─────────────────────────
+let photos = []; // [{id, name, dataUrl, blob, annotatedBlob|null}]
+let nextId = 0;
+
+document.getElementById("file-input").addEventListener("change", function() {
+  addFiles(Array.from(this.files));
+  this.value = "";
+});
+document.getElementById("camera-input").addEventListener("change", function() {
+  addFiles(Array.from(this.files));
+  this.value = "";
+});
+
+async function addFiles(files) {
+  for (const file of files) {
+    const blob = await resizeImage(file);
+    const dataUrl = await blobToDataUrl(blob);
+    photos.push({ id: nextId++, name: sanitizeName(file.name), dataUrl, blob, annotatedBlob: null });
+  }
+  renderGrid();
+}
+
+function blobToDataUrl(blob) {
+  return new Promise(res => {
+    const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob);
+  });
+}
+
+async function resizeImage(file, maxDim = 2400, quality = 0.88) {
+  return new Promise(res => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxDim || h > maxDim) {
+        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else        { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      c.toBlob(res, "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res(file); };
+    img.src = url;
+  });
+}
+
+function sanitizeName(name) {
+  return name.replace(/[\\/:*?"<>|]/g, "_");
+}
+
+function renderGrid() {
+  const grid = document.getElementById("photo-grid");
+  grid.innerHTML = "";
+  photos.forEach(p => {
+    const src = p.annotatedBlob ? URL.createObjectURL(p.annotatedBlob) : p.dataUrl;
+    const wrap = document.createElement("div");
+    wrap.className = "thumb-wrap";
+    wrap.innerHTML = `
+      <img src="${src}" alt="${p.name}">
+      <button class="thumb-btn thumb-edit" onclick="openAnnotate(${p.id})" title="Bearbeiten">✏️</button>
+      <button class="thumb-btn thumb-del"  onclick="removePhoto(${p.id})"  title="Entfernen">✕</button>
+      ${p.annotatedBlob ? '<span class="thumb-edited">Bearbeitet</span>' : ''}
+    `;
+    grid.appendChild(wrap);
+  });
+  const count = photos.length;
+  document.getElementById("photo-count").textContent = count + (count === 1 ? " Foto" : " Fotos");
+  document.getElementById("upload-btn").disabled = count === 0;
+}
+
+function removePhoto(id) {
+  photos = photos.filter(p => p.id !== id);
+  renderGrid();
+}
+
+// ── UPLOAD ───────────────────────────────────
+async function uploadAll() {
+  const hauptordner = document.getElementById("hauptordner").value.trim();
+  if (!hauptordner) { alert("Bitte einen Ordnernamen eingeben."); return; }
+  if (!photos.length) { alert("Keine Fotos ausgewählt."); return; }
+
+  const btn = document.getElementById("upload-btn");
+  btn.disabled = true; btn.textContent = "⏳ Wird hochgeladen…";
+
+  const logCard = document.getElementById("log-card");
+  const log = document.getElementById("upload-log");
+  logCard.style.display = "block"; log.innerHTML = "";
+
+  const unterordner = document.getElementById("unterordner").value.trim();
+  const token = await getMsToken();
+  if (!token) {
+    btn.disabled = false; btn.textContent = "☁️ Auf OneDrive speichern";
+    alert("Kein Zugriffs-Token. Bitte erneut anmelden."); return;
+  }
+
+  let ok = 0, err = 0;
+  for (const p of photos) {
+    const li = document.createElement("div");
+    li.className = "log-item";
+    li.innerHTML = `<span class="log-wait">⏳</span> <span>${p.name}</span>`;
+    log.appendChild(li);
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const blob = p.annotatedBlob || p.blob;
+      const ts = new Date().toISOString().slice(0,19).replace(/[T:]/g, "-");
+      const filename = ts + "_" + p.name.replace(/\.[^.]+$/, "") + ".jpg";
+
+      let remotePath = BASE_PATH + "/" + encodeURIComponent(hauptordner);
+      if (unterordner) remotePath += "/" + encodeURIComponent(unterordner);
+      remotePath += "/" + filename;
+
+      const url = `https://graph.microsoft.com/v1.0/drives/${DRIVE_ID}/root:/${remotePath}:/content`;
+      const resp = await fetch(url, {
+        method: "PUT",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "image/jpeg" },
+        body: blob
+      });
+      if (!resp.ok) throw new Error(resp.status);
+      li.innerHTML = `<span class="log-ok">✔</span> <span>${filename}</span>`;
+      ok++;
+    } catch(e) {
+      li.innerHTML = `<span class="log-err">✖</span> <span>${p.name} — Fehler: ${e.message}</span>`;
+      err++;
+    }
+  }
+
+  document.getElementById("cloud-status").textContent =
+    `✔ ${ok} hochgeladen${err ? ", " + err + " Fehler" : ""}`;
+  btn.textContent = ok === photos.length ? "✔ Fertig" : "☁️ Nochmals versuchen";
+  btn.disabled = false;
+  if (!err) {
+    photos = [];
+    setTimeout(() => { renderGrid(); logCard.style.display = "none";
+      btn.textContent = "☁️ Auf OneDrive speichern"; }, 2500);
+  }
+}
+
+// ── ANNOTATION ───────────────────────────────
+const modal  = document.getElementById("annotate-modal");
+const canvas = document.getElementById("annotate-canvas");
+const ctx    = canvas.getContext("2d");
+let currentTool = "pen";
+let currentColor = "#ff2020";
+let lineWidth = 4;
+let isDrawing = false;
+let startX = 0, startY = 0;
+let undoStack = [];
+let annotatingId = null;
+
+function setTool(t) {
+  currentTool = t;
+  document.querySelectorAll(".tool-btn[id^='tool-']").forEach(b => b.classList.remove("active"));
+  const el = document.getElementById("tool-" + t);
+  if (el) el.classList.add("active");
+}
+function setColor(c, swatch) {
+  currentColor = c;
+  document.querySelectorAll(".color-swatch").forEach(s => s.classList.remove("active"));
+  swatch.classList.add("active");
+}
+
+function openAnnotate(id) {
+  const photo = photos.find(p => p.id === id);
+  if (!photo) return;
+  annotatingId = id;
+  const img = new Image();
+  img.onload = () => {
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    undoStack = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+    modal.classList.add("open");
+  };
+  img.src = photo.annotatedBlob ? URL.createObjectURL(photo.annotatedBlob) : photo.dataUrl;
+}
+
+function cancelAnnotation() { modal.classList.remove("open"); undoStack = []; }
+
+function confirmAnnotation() {
+  canvas.toBlob(blob => {
+    const photo = photos.find(p => p.id === annotatingId);
+    if (photo) { photo.annotatedBlob = blob; renderGrid(); }
+    modal.classList.remove("open"); undoStack = [];
+  }, "image/jpeg", 0.92);
+}
+
+function saveUndo() {
+  undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  if (undoStack.length > 30) undoStack.shift();
+}
+function undoAnnotation() {
+  if (undoStack.length > 1) { undoStack.pop(); ctx.putImageData(undoStack[undoStack.length-1], 0, 0); }
+}
+function clearAnnotation() {
+  if (undoStack.length) { ctx.putImageData(undoStack[0], 0, 0); undoStack = [undoStack[0]]; }
+}
+
+// Coordinate helper (handles CSS scaling of canvas)
+function getPos(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / rect.width;
+  const sy = canvas.height / rect.height;
+  const src = e.touches ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
+  return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
+}
+
+// Drawing
+function onDown(e) {
+  const pos = getPos(e);
+  startX = pos.x; startY = pos.y;
+  isDrawing = true;
+  if (currentTool === "text") {
+    isDrawing = false;
+    const txt = prompt("Text eingeben:");
+    if (txt) {
+      ctx.font = `bold ${Math.max(20, lineWidth * 6)}px Arial`;
+      ctx.fillStyle = currentColor;
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.lineWidth = Math.max(1, lineWidth * 0.5);
+      ctx.strokeText(txt, pos.x, pos.y);
+      ctx.fillText(txt, pos.x, pos.y);
+      saveUndo();
+    }
+    return;
+  }
+  if (currentTool === "pen") {
+    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+    ctx.strokeStyle = currentColor; ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+  }
+}
+
+function onMove(e) {
+  if (!isDrawing) return;
+  const pos = getPos(e);
+  if (currentTool === "pen") {
+    ctx.lineTo(pos.x, pos.y); ctx.stroke();
+  } else if (currentTool === "arrow" || currentTool === "rect") {
+    ctx.putImageData(undoStack[undoStack.length-1], 0, 0);
+    if (currentTool === "arrow") drawArrow(startX, startY, pos.x, pos.y);
+    else drawRect(startX, startY, pos.x, pos.y);
+  }
+}
+
+function onUp(e) {
+  if (!isDrawing) return;
+  isDrawing = false;
+  const pos = getPos(e);
+  if (currentTool === "arrow") {
+    ctx.putImageData(undoStack[undoStack.length-1], 0, 0);
+    drawArrow(startX, startY, pos.x, pos.y);
+  } else if (currentTool === "rect") {
+    ctx.putImageData(undoStack[undoStack.length-1], 0, 0);
+    drawRect(startX, startY, pos.x, pos.y);
+  }
+  saveUndo();
+}
+
+function drawArrow(x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 5) return;
+  const headLen = Math.min(60, len * 0.35);
+  const angle = Math.atan2(dy, dx);
+  ctx.save();
+  ctx.strokeStyle = currentColor; ctx.fillStyle = currentColor;
+  ctx.lineWidth = lineWidth; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI/6), y2 - headLen * Math.sin(angle - Math.PI/6));
+  ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI/6), y2 - headLen * Math.sin(angle + Math.PI/6));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawRect(x1, y1, x2, y2) {
+  ctx.save();
+  ctx.strokeStyle = currentColor; ctx.lineWidth = lineWidth;
+  ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  ctx.restore();
+}
+
+canvas.addEventListener("mousedown",  onDown, { passive: false });
+canvas.addEventListener("mousemove",  onMove, { passive: false });
+canvas.addEventListener("mouseup",    onUp,   { passive: false });
+canvas.addEventListener("touchstart", onDown, { passive: false });
+canvas.addEventListener("touchmove",  onMove, { passive: false });
+canvas.addEventListener("touchend",   onUp,   { passive: false });
+
+// ── INIT ─────────────────────────────────────
+initMsal();
+updatePathPreview();
+</script>
+</body>
+</html>
