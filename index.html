@@ -472,7 +472,10 @@ function isoWeekDate(year, week, dayIdx) {
   else start.setDate(simple.getDate() + 8 - dow);
   const d = new Date(start);
   d.setDate(start.getDate() + dayIdx);
-  return d.toISOString().slice(0, 10);
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
 function currentISOWeek() {
