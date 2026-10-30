@@ -323,6 +323,13 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
   </div>
 
   <!-- WORKERS -->
+  <datalist id="monteur-list">
+    <option value="Tobias Jehle">
+    <option value="Stefan Kuhn">
+    <option value="Andreas Ernst">
+    <option value="Yannick Viarouge">
+    <option value="Silvan Homberger">
+  </datalist>
   <div id="workers-container"></div>
 
   <button class="btn btn-slate no-print" onclick="addWorker()" style="margin-bottom:12px;">
@@ -569,7 +576,7 @@ function renderWorkers() {
     const hdr = document.createElement("div");
     hdr.className = "worker-header no-print";
     hdr.innerHTML = `
-      <input class="worker-name" placeholder="Name Monteur ${wIdx+1}" value="${esc(w.name)}"
+      <input class="worker-name" list="monteur-list" placeholder="Name Monteur ${wIdx+1}" value="${esc(w.name)}"
         oninput="workers.find(x=>x.id==='${w.id}').name=this.value" />
       <label class="toggle-label">
         <input type="checkbox" ${w.perDayDesc?"checked":""} onchange="setPerDay('${w.id}',this.checked)"> Tägliche Beschreibung
@@ -1224,21 +1231,21 @@ function generateRapportPdf(rapport) {
       startY: y,
       head: [headRow],
       body: bodyRows,
-      styles: { fontSize: 7.5, cellPadding: 1.5, halign: "center", overflow: "linebreak" },
+      styles: { fontSize: 7.5, cellPadding: 1.2, halign: "center", overflow: "linebreak" },
       headStyles: { fillColor: green, textColor: 255, fontStyle: "bold", halign: "center", fontSize: 7 },
       columnStyles: {
-        0: { cellWidth: 8,  halign: "center" },
-        1: { cellWidth: 20, halign: "center" },
-        2: { cellWidth: 14, halign: "center" },
-        3: { cellWidth: 14, halign: "center" },
-        4: { cellWidth: 13, halign: "center" },
-        5: { cellWidth: 12, halign: "center" },
-        6: { cellWidth: 12, halign: "center" },
-        7: { cellWidth: 9,  halign: "center" },
-        8: { cellWidth: 80, halign: "left" }
+        0: { cellWidth: 7,  halign: "center" },
+        1: { cellWidth: 18, halign: "center" },
+        2: { cellWidth: 12, halign: "center" },
+        3: { cellWidth: 12, halign: "center" },
+        4: { cellWidth: 12, halign: "center" },
+        5: { cellWidth: 11, halign: "center" },
+        6: { cellWidth: 10, halign: "center" },
+        7: { cellWidth: 8,  halign: "center" },
+        8: { cellWidth: 92, halign: "left" }
       },
       margin: { left: 14, right: 14 },
-      foot: [["", "", "", "", "Summe:", toTimeStr(totalMin), "", "", ""]],
+      foot: [[{ content: "Summe:", colSpan: 5, styles: { halign: "right", fontStyle: "bold" } }, toTimeStr(totalMin), "", "", ""]],
       footStyles: { fontStyle: "bold", fillColor: [245,245,245], textColor: [0,0,0], halign: "center" },
     });
     y = doc.lastAutoTable.finalY + 3;
