@@ -541,7 +541,7 @@ function newWorker(kw, yr) {
       desc: ""
     };
   });
-  return { id: "w_" + Date.now() + "_" + Math.random().toString(36).slice(2,6), name: "", perDayDesc: false, days, beschreibung: "" };
+  return { id: "w_" + Date.now() + "_" + Math.random().toString(36).slice(2,6), name: "", perDayDesc: false, days, beschreibung: "", bemerkung: "" };
 }
 
 function addWorker() {
@@ -642,7 +642,7 @@ function renderWorkers() {
     sum.textContent = "Summe Woche: " + toTimeStr(workerMin(w)) + " Std.";
     div.appendChild(sum);
 
-    // Week description
+    // Week description (only when not per-day)
     if (!w.perDayDesc) {
       const ta = document.createElement("textarea");
       ta.className = "week-desc";
@@ -652,6 +652,15 @@ function renderWorkers() {
       ta.oninput = () => { workers.find(x=>x.id===w.id).beschreibung = ta.value; };
       div.appendChild(ta);
     }
+
+    // Bemerkung (always shown)
+    const bem = document.createElement("textarea");
+    bem.className = "week-desc";
+    bem.rows = 2;
+    bem.placeholder = "Bemerkung";
+    bem.value = w.bemerkung || "";
+    bem.oninput = () => { workers.find(x=>x.id===w.id).bemerkung = bem.value; };
+    div.appendChild(bem);
 
     container.appendChild(div);
   });
@@ -1191,40 +1200,59 @@ function generateRapportPdf(rapport) {
       return s + Math.max(0, toMin(d.ab) - toMin(d.hin) - toMin(d.pause));
     }, 0);
 
+    // Colonnes compactes + Beschreibung à droite
+    // Tag(8) Datum(20) Hin(14) Ab(14) Pause(13) Std(12) %(12) Auslös(9) = 102mm → Beschreibung = 80mm
+    const hasPerDay = !!worker.perDayDesc;
+    const headRow = ["Tag", "Datum", "Hin.", "Ab.", "Pause", "Std.", "%", "A.", "Beschreibung"];
+    const bodyRows = days.map(function(d, idx) {
+      const mins = Math.max(0, toMin(d.ab) - toMin(d.hin) - toMin(d.pause));
+      const desc = hasPerDay ? (d.desc || "") : (idx === 0 ? (worker.beschreibung || "") : "");
+      return [
+        PDF_DAY_NAMES[idx] || "",
+        d.datum || "",
+        d.hin || "",
+        d.ab || "",
+        d.pause || "",
+        toTimeStr(mins),
+        d.zuschlag ? d.zuschlag + "%" : "",
+        d.auslosung ? "[X]" : "",
+        desc
+      ];
+    });
+
     doc.autoTable({
       startY: y,
-      head: [["Tag", "Datum", "Hinfahrt", "Abreise", "Pause", "Std.", "% Zuschl.", "Auslös."]],
-      body: days.map(function(d, idx) {
-        const mins = Math.max(0, toMin(d.ab) - toMin(d.hin) - toMin(d.pause));
-        // Find day index from datum
-        const dayName = PDF_DAY_NAMES[idx] || "";
-        return [
-          dayName,
-          d.datum || "",
-          d.hin || "",
-          d.ab || "",
-          d.pause || "00:45",
-          toTimeStr(mins),
-          d.zuschlag ? d.zuschlag + "%" : "",
-          d.auslosung ? "✓" : ""
-        ];
-      }),
-      styles: { fontSize: 8, cellPadding: 1.8, halign: "center" },
-      headStyles: { fillColor: green, textColor: 255, fontStyle: "bold", halign: "center" },
-      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 28 }, 5: { cellWidth: 16 } },
+      head: [headRow],
+      body: bodyRows,
+      styles: { fontSize: 7.5, cellPadding: 1.5, halign: "center", overflow: "linebreak" },
+      headStyles: { fillColor: green, textColor: 255, fontStyle: "bold", halign: "center", fontSize: 7 },
+      columnStyles: {
+        0: { cellWidth: 8,  halign: "center" },
+        1: { cellWidth: 20, halign: "center" },
+        2: { cellWidth: 14, halign: "center" },
+        3: { cellWidth: 14, halign: "center" },
+        4: { cellWidth: 13, halign: "center" },
+        5: { cellWidth: 12, halign: "center" },
+        6: { cellWidth: 12, halign: "center" },
+        7: { cellWidth: 9,  halign: "center" },
+        8: { cellWidth: 80, halign: "left" }
+      },
       margin: { left: 14, right: 14 },
-      foot: [["", "", "", "", "Summe:", toTimeStr(totalMin), "", ""]],
-      footStyles: { fontStyle: "bold", fillColor: [245,245,245], textColor: [0,0,0] },
+      foot: [["", "", "", "", "Summe:", toTimeStr(totalMin), "", "", ""]],
+      footStyles: { fontStyle: "bold", fillColor: [245,245,245], textColor: [0,0,0], halign: "center" },
     });
-    y = doc.lastAutoTable.finalY + 4;
+    y = doc.lastAutoTable.finalY + 3;
 
-    if (worker.beschreibung) {
-      doc.setFont(undefined, "italic"); doc.setFontSize(8); doc.setTextColor(60,60,60);
-      doc.text(worker.beschreibung, 14, y, { maxWidth: 182 });
-      y += 7;
-      doc.setTextColor(0,0,0);
+    // Bemerkung
+    if (worker.bemerkung) {
+      doc.setFont(undefined, "bold"); doc.setFontSize(8); doc.setTextColor(0,0,0);
+      doc.text("Bemerkung:", 14, y);
+      doc.setFont(undefined, "normal");
+      doc.text(worker.bemerkung, 40, y, { maxWidth: 156 });
+      const lines = doc.splitTextToSize(worker.bemerkung, 156).length;
+      y += Math.max(5, lines * 4);
     }
-    y += 3;
+    y += 4;
   });
 
   // Gesamtsumme
@@ -1302,45 +1330,4 @@ async function saveToOneDrive(rapport) {
       if (cloudStatus) cloudStatus.textContent = "❌ " + resp.status + ": " + errText.substring(0, 120);
       return false;
     }
-  } catch(e) {
-    const cloudStatus = document.getElementById("cloud-status");
-    if (cloudStatus) cloudStatus.textContent = "❌ Exception: " + String(e).substring(0, 120);
-    return false;
-  }
-}
-
-// Patch saveRapport to also save to OneDrive when connected
-const _origSaveRapport = saveRapport;
-saveRapport = async function() {
-  _origSaveRapport();
-  if (msAccount) {
-    setStatus("Speichern auf OneDrive…");
-    const h = getHeader();
-    const id = currentId || ("r_" + Date.now());
-    const sigs = { sach: getSigData("sig-sach"), syn: getSigData("sig-syn"), bau: getSigData("sig-bau") };
-    const data = { id, header: h, workers, sigs, savedAt: new Date().toISOString() };
-    try {
-      const ok = await saveToOneDrive(data);
-      if (ok) {
-        setStatus("Gespeichert lokal + OneDrive ✓");
-      } else {
-        setStatus("Lokal gespeichert — OneDrive fehlgeschlagen ⚠️");
-      }
-    } catch(e) {
-      setStatus("Lokal gespeichert — OneDrive: " + e.message);
-    }
-  }
-};
-
-document.addEventListener("DOMContentLoaded", function() {
-  initMsal();
-});
-</script>
-
-<style>
-  .print-only { display: none; }
-  @media print { .print-only { display: block; } }
-</style>
-
-</body>
-</html>
+  } catc
