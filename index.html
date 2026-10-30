@@ -167,7 +167,9 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
 
   /* WORKER HEADER */
   .worker-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .worker-name { flex: 1; min-width: 140px; border: none; border-bottom: 1px solid var(--slate-300); padding: 4px 4px 4px 0; font-size: 14px; font-weight: 600; color: var(--slate-800); }
+  .worker-name-select { flex: 1; min-width: 140px; max-width: 220px; border: none; border-bottom: 1px solid var(--slate-300); padding: 4px 4px 4px 0; font-size: 14px; font-weight: 600; color: var(--slate-800); background: transparent; cursor: pointer; }
+  .worker-name-select:focus { outline: none; border-bottom-color: var(--blue); }
+  .worker-name { flex: 1; min-width: 140px; max-width: 200px; border: none; border-bottom: 1px solid var(--blue); padding: 4px 4px 4px 0; font-size: 14px; font-weight: 600; color: var(--slate-800); }
   .worker-name:focus { outline: none; border-bottom-color: var(--blue); }
   .toggle-label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--slate-500); cursor: pointer; }
 
@@ -323,13 +325,6 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
   </div>
 
   <!-- WORKERS -->
-  <datalist id="monteur-list">
-    <option value="Tobias Jehle">
-    <option value="Stefan Kuhn">
-    <option value="Andreas Ernst">
-    <option value="Yannick Viarouge">
-    <option value="Silvan Homberger">
-  </datalist>
   <div id="workers-container"></div>
 
   <button class="btn btn-slate no-print" onclick="addWorker()" style="margin-bottom:12px;">
@@ -578,8 +573,16 @@ function renderWorkers() {
     // Header
     const hdr = document.createElement("div");
     hdr.className = "worker-header no-print";
+    const MONTEURS = ["Stefan Kuhn","Tobias Jehle","Andreas Ernst","Yannick Viarouge","Silvan Homberger"];
+    const isCustom = w.name && !MONTEURS.includes(w.name);
     hdr.innerHTML = `
-      <input class="worker-name" list="monteur-list" placeholder="Name Monteur ${wIdx+1}" value="${esc(w.name)}"
+      <select class="worker-name-select" onchange="onMonteurSelect('${w.id}',this)">
+        <option value="" ${!w.name?'selected':''}>-- Monteur --</option>
+        ${MONTEURS.map(n=>`<option value="${n}" ${w.name===n?'selected':''}>${n}</option>`).join('')}
+        <option value="__autre__" ${isCustom?'selected':''}>Autre...</option>
+      </select>
+      <input class="worker-name" placeholder="Nom personnalisé" value="${esc(isCustom?w.name:'')}"
+        style="display:${isCustom?'flex':'none'}"
         oninput="workers.find(x=>x.id==='${w.id}').name=this.value" />
       <label class="toggle-label">
         <input type="checkbox" ${w.perDayDesc?"checked":""} onchange="setPerDay('${w.id}',this.checked)"> Tägliche Beschreibung
@@ -676,6 +679,19 @@ function renderWorkers() {
   });
 
   updateTotal();
+}
+
+function onMonteurSelect(id, sel) {
+  const w = workers.find(x=>x.id===id);
+  const input = sel.nextElementSibling;
+  if (sel.value === '__autre__') {
+    input.style.display = 'flex';
+    input.focus();
+    w.name = "";
+  } else {
+    input.style.display = 'none';
+    w.name = sel.value;
+  }
 }
 
 function setPerDay(id, val) {
@@ -800,13 +816,20 @@ function setHeader(h) {
   document.getElementById("h-km").value = h.km || "";
 }
 
+function getInitials(name) {
+  if (!name) return "XX";
+  return name.trim().split(/\s+/).map(p => p[0] || "").join("").toUpperCase().slice(0, 3);
+}
+
 function saveRapport() {
   let h = getHeader();
   let rapportNr = h.rapportNr;
   if (!rapportNr) {
-    let ctr = (storageGet("rapport-counter") || 0) + 1;
-    rapportNr = String(ctr);
-    storageSet("rapport-counter", ctr);
+    const initials = getInitials((workers[0] && workers[0].name) || "");
+    const key = "rapport-counter-" + initials;
+    let ctr = (storageGet(key) || 0) + 1;
+    rapportNr = initials + "-" + ctr;
+    storageSet(key, ctr);
     document.getElementById("h-rapport").value = rapportNr;
     h.rapportNr = rapportNr;
   }
