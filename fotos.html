@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Fotos – SYNGAS</title>
 <script>/*! @azure/msal-browser v2.38.3 2023-10-27 */
 "use strict";!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).msal={})}(this,(function(e){
@@ -177,43 +177,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
 /* ── ANNOTATION MODAL ── */
 #annotate-modal {
-  display: none; position: fixed; inset: 0; z-index: 1000;
+  display: none; position: fixed; left: 0; top: 0; width: 100%;
+  height: 100vh; height: 100dvh; z-index: 1000;
   background: #000; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
 }
 #annotate-modal.open { display: flex; }
-
-#annotate-canvas {
-  flex: 1; width: 100%; object-fit: contain; touch-action: none;
-  cursor: crosshair; display: block; max-height: calc(100vh - 110px);
-}
-
 .annotate-toolbar {
-  background: rgba(0,0,0,.85); padding: 10px 12px;
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: #111; padding: 6px 8px; display: flex; flex-direction: column; gap: 6px;
+  border-bottom: 1px solid #333; flex-shrink: 0;
 }
+.tb-row { display: flex; align-items: center; gap: 5px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tb-row::-webkit-scrollbar { display: none; }
+.tb-sep { width: 1px; height: 24px; background: rgba(255,255,255,.2); flex-shrink: 0; }
+.tb-spacer { flex: 1; min-width: 0; }
 .tool-btn {
   background: rgba(255,255,255,.15); border: 2px solid transparent;
-  border-radius: 8px; padding: 7px 12px; color: white; cursor: pointer;
-  font-size: 15px; transition: all .15s;
+  border-radius: 8px; padding: 6px 7px; color: white; cursor: pointer;
+  font-size: 16px; line-height: 1; flex-shrink: 0; min-width: 38px; min-height: 38px;
 }
 .tool-btn.active { border-color: var(--green); background: rgba(34,169,74,.3); }
-.tool-btn:hover  { background: rgba(255,255,255,.25); }
-
+.tool-btn:disabled { opacity: .3; }
+.tool-btn.done { background: var(--green); font-weight: 700; font-size: 18px; min-width: 48px; }
 .color-swatch {
   width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
-  cursor: pointer; transition: border-color .15s; flex-shrink: 0;
+  cursor: pointer; flex-shrink: 0;
 }
-.color-swatch.active { border-color: white; transform: scale(1.15); }
-
-.size-slider { -webkit-appearance: none; width: 70px; height: 4px;
-               border-radius: 2px; background: rgba(255,255,255,.3);
-               outline: none; cursor: pointer; }
-.size-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px;
-  border-radius: 50%; background: white; cursor: pointer; }
-
-.annotate-toolbar .spacer { flex: 1; }
-
-.annotate-actions { display: flex; gap: 8px; }
+.color-swatch.active { border-color: white; box-shadow: 0 0 0 2px #000 inset; }
+.size-slider { -webkit-appearance: none; width: 80px; height: 4px; flex-shrink: 0;
+  border-radius: 2px; background: rgba(255,255,255,.3); outline: none; }
+.size-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px;
+  border-radius: 50%; background: white; }
+#annotate-stage { flex: 1; position: relative; overflow: hidden; touch-action: none; }
+#annotate-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.annotate-hint { color: #888; font-size: 11px; text-align: center; }
 </style>
 </head>
 <body>
@@ -298,42 +295,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
      ANNOTATION MODAL
 ═══════════════════════════════════════════ -->
 <div id="annotate-modal">
-  <canvas id="annotate-canvas"></canvas>
-
   <div class="annotate-toolbar">
-    <!-- Tools -->
-    <button class="tool-btn active" id="tool-pen"   onclick="setTool('pen')"  title="Stift">✏️</button>
-    <button class="tool-btn"        id="tool-arrow" onclick="setTool('arrow')" title="Pfeil">➡️</button>
-    <button class="tool-btn"        id="tool-rect"  onclick="setTool('rect')"  title="Rechteck">⬜</button>
-    <button class="tool-btn"        id="tool-text"  onclick="setTool('text')"  title="Text">T</button>
-
-    <div style="width:1px;height:24px;background:rgba(255,255,255,.2);margin:0 4px"></div>
-
-    <!-- Colors -->
-    <div class="color-swatch active" style="background:#ff2020" onclick="setColor('#ff2020',this)"></div>
-    <div class="color-swatch" style="background:#ffee00" onclick="setColor('#ffee00',this)"></div>
-    <div class="color-swatch" style="background:#00e640" onclick="setColor('#00e640',this)"></div>
-    <div class="color-swatch" style="background:#1e90ff" onclick="setColor('#1e90ff',this)"></div>
-    <div class="color-swatch" style="background:#ffffff" onclick="setColor('#ffffff',this)"></div>
-    <div class="color-swatch" style="background:#000000;border:1px solid #555" onclick="setColor('#000000',this)"></div>
-
-    <div style="width:1px;height:24px;background:rgba(255,255,255,.2);margin:0 4px"></div>
-
-    <!-- Stroke size -->
-    <span style="color:white;font-size:12px">⬤</span>
-    <input type="range" class="size-slider" id="size-slider" min="1" max="20" value="4"
-           oninput="lineWidth=+this.value">
-
-    <div class="spacer"></div>
-
-    <!-- Actions -->
-    <div class="annotate-actions">
+    <div class="tb-row">
+      <button class="tool-btn" id="tool-select" onclick="setTool('select')" title="Auswählen / verschieben">👆</button>
+      <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')" title="Stift">✏️</button>
+      <button class="tool-btn" id="tool-arrow" onclick="setTool('arrow')" title="Pfeil">➡️</button>
+      <button class="tool-btn" id="tool-rect" onclick="setTool('rect')" title="Rechteck">⬜</button>
+      <button class="tool-btn" id="tool-text" onclick="setTool('text')" title="Text"><b>T</b></button>
+      <div class="tb-spacer"></div>
       <button class="tool-btn" onclick="undoAnnotation()" title="Rückgängig">↩️</button>
-      <button class="tool-btn" onclick="clearAnnotation()" title="Alles löschen" style="color:#ff6060">🗑️</button>
       <button class="tool-btn" onclick="cancelAnnotation()" title="Abbrechen">✖</button>
-      <button class="tool-btn active" onclick="confirmAnnotation()" title="Speichern" style="color:#00e640">✔</button>
+      <button class="tool-btn done" onclick="confirmAnnotation()" title="Speichern">✔</button>
     </div>
+    <div class="tb-row">
+      <div class="color-swatch active" style="background:#ff2020" onclick="setColor('#ff2020',this)"></div>
+      <div class="color-swatch" style="background:#ffee00" onclick="setColor('#ffee00',this)"></div>
+      <div class="color-swatch" style="background:#00e640" onclick="setColor('#00e640',this)"></div>
+      <div class="color-swatch" style="background:#1e90ff" onclick="setColor('#1e90ff',this)"></div>
+      <div class="color-swatch" style="background:#ffffff" onclick="setColor('#ffffff',this)"></div>
+      <div class="color-swatch" style="background:#000000;border-color:#555" onclick="setColor('#000000',this)"></div>
+      <div class="tb-sep"></div>
+      <input type="range" class="size-slider" id="size-slider" min="1" max="20" value="4" oninput="setSize(+this.value)">
+      <div class="tb-sep"></div>
+      <button class="tool-btn" id="btn-edit-text" onclick="editSelectedText()" title="Text ändern" disabled>✏️T</button>
+      <button class="tool-btn" id="btn-delete" onclick="deleteSelected()" title="Auswahl löschen" disabled>🗑️</button>
+      <button class="tool-btn" onclick="clearAnnotation()" title="Alles löschen" style="font-size:12px">Alles ✕</button>
+    </div>
+    <div class="annotate-hint">2 Finger = zoomen/verschieben · 👆 = Objekt antippen, ziehen, löschen</div>
   </div>
+  <div id="annotate-stage"><canvas id="annotate-canvas"></canvas></div>
 </div>
 
 <!-- ═══════════════════════════════════════════
@@ -541,8 +531,15 @@ async function uploadAll() {
         headers: { Authorization: "Bearer " + token, "Content-Type": "image/jpeg" },
         body: blob
       });
-      if (!resp.ok) throw new Error(resp.status);
-      li.innerHTML = `<span class="log-ok">✔</span> <span>${filename}</span>`;
+      if (!resp.ok) {
+        let msg = "";
+        try { const j = await resp.json(); msg = (j.error && (j.error.code + ": " + j.error.message)) || ""; } catch(_) {}
+        throw new Error(resp.status + (msg ? " – " + msg : ""));
+      }
+      let webUrl = "";
+      try { const j = await resp.json(); webUrl = j.webUrl || ""; } catch(_) {}
+      li.innerHTML = `<span class="log-ok">✔</span> <span>${filename}</span>` +
+        (webUrl ? ` <a href="${webUrl.replace(/\/[^\/]*$/, "")}" target="_blank" style="margin-left:6px">Ordner öffnen</a>` : "");
       ok++;
     } catch(e) {
       li.innerHTML = `<span class="log-err">✖</span> <span>${p.name} — Fehler: ${e.message}</span>`;
@@ -556,164 +553,420 @@ async function uploadAll() {
   btn.disabled = false;
   if (!err) {
     photos = [];
-    setTimeout(() => { renderGrid(); logCard.style.display = "none";
-      btn.textContent = "☁️ Auf OneDrive speichern"; }, 2500);
+    renderGrid();
+    setTimeout(() => { btn.textContent = "☁️ Auf OneDrive speichern"; }, 2500);
   }
 }
 
-// ── ANNOTATION ───────────────────────────────
+// ── ANNOTATION (objektbasiert) ───────────────
 const modal  = document.getElementById("annotate-modal");
+const stage  = document.getElementById("annotate-stage");
 const canvas = document.getElementById("annotate-canvas");
 const ctx    = canvas.getContext("2d");
+
 let currentTool = "pen";
 let currentColor = "#ff2020";
 let lineWidth = 4;
-let isDrawing = false;
-let startX = 0, startY = 0;
-let undoStack = [];
 let annotatingId = null;
+let baseImg = null;          // Originalbild
+let objects = [];            // Annotationen in Bildkoordinaten
+let undoStack = [];
+let selected = null;         // ausgewähltes Objekt
+let draft = null;            // Objekt im Entstehen
+let view = { s: 1, ox: 0, oy: 0 };
+let unit = 1;                // Bildpixel pro "Grösseneinheit"
+const pointers = new Map();
+let gesture = null;          // {type:'draw'|'move'|'pan'|'pinch', ...}
+let lastTap = { t: 0, obj: null };
 
 function setTool(t) {
   currentTool = t;
   document.querySelectorAll(".tool-btn[id^='tool-']").forEach(b => b.classList.remove("active"));
   const el = document.getElementById("tool-" + t);
   if (el) el.classList.add("active");
+  if (t !== "select") select(null);
 }
 function setColor(c, swatch) {
   currentColor = c;
   document.querySelectorAll(".color-swatch").forEach(s => s.classList.remove("active"));
   swatch.classList.add("active");
+  if (selected) { saveUndo(); selected.color = c; render(); }
+}
+function setSize(v) {
+  lineWidth = v;
+  if (selected) {
+    if (selected.type === "text") selected.size = textSize(v);
+    else selected.w = strokeW(v);
+    render();
+  }
+}
+const strokeW  = v => v * unit;
+const textSize = v => (24 + v * 6) * unit;
+
+function select(o) {
+  selected = o;
+  document.getElementById("btn-delete").disabled = !o;
+  document.getElementById("btn-edit-text").disabled = !(o && o.type === "text");
+  render();
 }
 
+// ── Öffnen / Schliessen ──
 function openAnnotate(id) {
   const photo = photos.find(p => p.id === id);
   if (!photo) return;
   annotatingId = id;
   const img = new Image();
   img.onload = () => {
-    canvas.width  = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    ctx.drawImage(img, 0, 0);
-    undoStack = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+    baseImg = img;
+    unit = Math.max(img.naturalWidth, img.naturalHeight) / 1000;
+    objects = JSON.parse(JSON.stringify(photo.objects || []));
+    undoStack = []; selected = null; draft = null; pointers.clear(); gesture = null;
     modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => { resizeCanvas(); fitView(); select(null); });
   };
-  img.src = photo.annotatedBlob ? URL.createObjectURL(photo.annotatedBlob) : photo.dataUrl;
+  img.src = photo.dataUrl;   // immer vom Original, Annotationen bleiben bearbeitbar
 }
-
-function cancelAnnotation() { modal.classList.remove("open"); undoStack = []; }
+function closeModal() {
+  modal.classList.remove("open");
+  document.body.style.overflow = "";
+  baseImg = null;
+}
+function cancelAnnotation() { closeModal(); }
 
 function confirmAnnotation() {
-  canvas.toBlob(blob => {
-    const photo = photos.find(p => p.id === annotatingId);
-    if (photo) { photo.annotatedBlob = blob; renderGrid(); }
-    modal.classList.remove("open"); undoStack = [];
+  const photo = photos.find(p => p.id === annotatingId);
+  if (!photo || !baseImg) { closeModal(); return; }
+  if (!objects.length) {
+    photo.objects = []; photo.annotatedBlob = null; renderGrid(); closeModal(); return;
+  }
+  const off = document.createElement("canvas");
+  off.width = baseImg.naturalWidth; off.height = baseImg.naturalHeight;
+  const c = off.getContext("2d");
+  c.drawImage(baseImg, 0, 0);
+  objects.forEach(o => drawObj(c, o));
+  off.toBlob(blob => {
+    photo.objects = JSON.parse(JSON.stringify(objects));
+    photo.annotatedBlob = blob;
+    renderGrid(); closeModal();
   }, "image/jpeg", 0.92);
 }
 
+// ── Undo ──
 function saveUndo() {
-  undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-  if (undoStack.length > 30) undoStack.shift();
+  undoStack.push(JSON.stringify(objects));
+  if (undoStack.length > 50) undoStack.shift();
 }
 function undoAnnotation() {
-  if (undoStack.length > 1) { undoStack.pop(); ctx.putImageData(undoStack[undoStack.length-1], 0, 0); }
+  if (!undoStack.length) return;
+  objects = JSON.parse(undoStack.pop());
+  select(null);
 }
 function clearAnnotation() {
-  if (undoStack.length) { ctx.putImageData(undoStack[0], 0, 0); undoStack = [undoStack[0]]; }
+  if (!objects.length) return;
+  if (!confirm("Alle Markierungen löschen?")) return;
+  saveUndo(); objects = []; select(null);
+}
+function deleteSelected() {
+  if (!selected) return;
+  saveUndo();
+  objects = objects.filter(o => o !== selected);
+  select(null);
+}
+function editSelectedText() {
+  if (!selected || selected.type !== "text") return;
+  const t = prompt("Text ändern:", selected.text);
+  if (t === null) return;
+  saveUndo();
+  if (t.trim() === "") { objects = objects.filter(o => o !== selected); select(null); }
+  else { selected.text = t; render(); }
 }
 
-// Coordinate helper (handles CSS scaling of canvas)
-function getPos(e) {
+// ── Ansicht ──
+function resizeCanvas() {
+  const r = stage.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(r.width * dpr);
+  canvas.height = Math.round(r.height * dpr);
+  render();
+}
+function fitView() {
+  if (!baseImg) return;
+  const r = stage.getBoundingClientRect();
+  const s = Math.min(r.width / baseImg.naturalWidth, r.height / baseImg.naturalHeight);
+  view = { s, ox: (r.width - baseImg.naturalWidth * s) / 2, oy: (r.height - baseImg.naturalHeight * s) / 2 };
+  render();
+}
+window.addEventListener("resize", () => { if (modal.classList.contains("open")) { resizeCanvas(); fitView(); } });
+
+function toImg(clientX, clientY) {
+  const r = stage.getBoundingClientRect();
+  return { x: (clientX - r.left - view.ox) / view.s, y: (clientY - r.top - view.oy) / view.s };
+}
+
+// ── Zeichnen ──
+function render() {
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!baseImg) return;
+  ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.ox, dpr * view.oy);
+  ctx.drawImage(baseImg, 0, 0);
+  objects.forEach(o => drawObj(ctx, o));
+  if (draft) drawObj(ctx, draft);
+  if (selected) {
+    const b = bbox(selected), pad = 10 / view.s;
+    ctx.save();
+    ctx.lineWidth = 2 / view.s;
+    ctx.setLineDash([8 / view.s, 6 / view.s]);
+    ctx.strokeStyle = "#fff";
+    ctx.strokeRect(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
+    ctx.strokeStyle = "#000"; ctx.lineDashOffset = 7 / view.s;
+    ctx.strokeRect(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
+    ctx.restore();
+  }
+}
+
+function drawObj(c, o) {
+  c.save();
+  c.strokeStyle = o.color; c.fillStyle = o.color;
+  c.lineCap = "round"; c.lineJoin = "round";
+  if (o.type === "pen") {
+    c.lineWidth = o.w;
+    c.beginPath();
+    o.pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]));
+    if (o.pts.length === 1) c.lineTo(o.pts[0][0] + 0.1, o.pts[0][1]);
+    c.stroke();
+  } else if (o.type === "rect") {
+    c.lineWidth = o.w;
+    c.strokeRect(Math.min(o.x1, o.x2), Math.min(o.y1, o.y2), Math.abs(o.x2 - o.x1), Math.abs(o.y2 - o.y1));
+  } else if (o.type === "arrow") {
+    const dx = o.x2 - o.x1, dy = o.y2 - o.y1, len = Math.hypot(dx, dy);
+    if (len > 1) {
+      const head = Math.min(Math.max(o.w * 4, len * 0.25), len * 0.6);
+      const a = Math.atan2(dy, dx);
+      c.lineWidth = o.w;
+      c.beginPath(); c.moveTo(o.x1, o.y1);
+      c.lineTo(o.x2 - head * 0.8 * Math.cos(a), o.y2 - head * 0.8 * Math.sin(a)); c.stroke();
+      c.beginPath(); c.moveTo(o.x2, o.y2);
+      c.lineTo(o.x2 - head * Math.cos(a - Math.PI / 7), o.y2 - head * Math.sin(a - Math.PI / 7));
+      c.lineTo(o.x2 - head * Math.cos(a + Math.PI / 7), o.y2 - head * Math.sin(a + Math.PI / 7));
+      c.closePath(); c.fill();
+    }
+  } else if (o.type === "text") {
+    c.font = `bold ${o.size}px Arial`;
+    c.textBaseline = "top";
+    c.lineWidth = Math.max(2, o.size * 0.12);
+    c.strokeStyle = (o.color === "#000000") ? "rgba(255,255,255,.8)" : "rgba(0,0,0,.7)";
+    o.text.split("\n").forEach((line, i) => {
+      c.strokeText(line, o.x, o.y + i * o.size * 1.15);
+      c.fillText(line, o.x, o.y + i * o.size * 1.15);
+    });
+  }
+  c.restore();
+}
+
+function bbox(o) {
+  if (o.type === "pen") {
+    const xs = o.pts.map(p => p[0]), ys = o.pts.map(p => p[1]);
+    const x = Math.min(...xs), y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  }
+  if (o.type === "text") {
+    ctx.save(); ctx.font = `bold ${o.size}px Arial`;
+    const lines = o.text.split("\n");
+    const w = Math.max(...lines.map(l => ctx.measureText(l).width));
+    ctx.restore();
+    return { x: o.x, y: o.y, w, h: lines.length * o.size * 1.15 };
+  }
+  const x = Math.min(o.x1, o.x2), y = Math.min(o.y1, o.y2);
+  return { x, y, w: Math.abs(o.x2 - o.x1), h: Math.abs(o.y2 - o.y1) };
+}
+
+function distSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - x1) * dx + (py - y1) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+function hitTest(p) {
+  const tol = 22 / view.s;   // ca. Fingerbreite
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i], t = tol + (o.w || 0) / 2;
+    if (o.type === "text") {
+      const b = bbox(o);
+      if (p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol) return o;
+    } else if (o.type === "arrow") {
+      if (distSeg(p.x, p.y, o.x1, o.y1, o.x2, o.y2) < t) return o;
+    } else if (o.type === "rect") {
+      const x1 = Math.min(o.x1, o.x2), x2 = Math.max(o.x1, o.x2), y1 = Math.min(o.y1, o.y2), y2 = Math.max(o.y1, o.y2);
+      if (distSeg(p.x, p.y, x1, y1, x2, y1) < t || distSeg(p.x, p.y, x2, y1, x2, y2) < t ||
+          distSeg(p.x, p.y, x2, y2, x1, y2) < t || distSeg(p.x, p.y, x1, y2, x1, y1) < t) return o;
+    } else if (o.type === "pen") {
+      for (let j = 0; j < o.pts.length; j++) {
+        const a = o.pts[j], b = o.pts[Math.min(j + 1, o.pts.length - 1)];
+        if (distSeg(p.x, p.y, a[0], a[1], b[0], b[1]) < t) return o;
+      }
+    }
+  }
+  return null;
+}
+
+function moveObj(o, dx, dy) {
+  if (o.type === "pen") o.pts.forEach(p => { p[0] += dx; p[1] += dy; });
+  else if (o.type === "text") { o.x += dx; o.y += dy; }
+  else { o.x1 += dx; o.y1 += dy; o.x2 += dx; o.y2 += dy; }
+}
+
+// ── Gesten (Pointer Events: Maus, Finger, Stift) ──
+function pinchState() {
+  const [a, b] = [...pointers.values()];
+  return { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+}
+
+canvas.addEventListener("pointerdown", e => {
   e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const sx = canvas.width / rect.width;
-  const sy = canvas.height / rect.height;
-  const src = e.touches ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
-  return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
-}
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-// Drawing
-function onDown(e) {
-  const pos = getPos(e);
-  startX = pos.x; startY = pos.y;
-  isDrawing = true;
-  if (currentTool === "text") {
-    isDrawing = false;
-    const txt = prompt("Text eingeben:");
-    if (txt) {
-      ctx.font = `bold ${Math.max(20, lineWidth * 6)}px Arial`;
-      ctx.fillStyle = currentColor;
-      ctx.strokeStyle = "rgba(0,0,0,0.5)";
-      ctx.lineWidth = Math.max(1, lineWidth * 0.5);
-      ctx.strokeText(txt, pos.x, pos.y);
-      ctx.fillText(txt, pos.x, pos.y);
+  if (pointers.size === 2) {
+    // Zweiter Finger: laufende Aktion abbrechen, Zoom/Verschieben starten
+    if (gesture && gesture.type === "draw") draft = null;
+    if (gesture && gesture.type === "move" && !gesture.moved) undoStack.pop();
+    const st = pinchState();
+    const r = stage.getBoundingClientRect();
+    gesture = { type: "pinch", start: st, view: { ...view }, r };
+    render(); return;
+  }
+  if (pointers.size > 2) return;
+
+  const p = toImg(e.clientX, e.clientY);
+  const now = Date.now();
+
+  if (currentTool === "select") {
+    const hit = hitTest(p);
+    if (hit) {
+      // Doppeltipp auf Text → bearbeiten
+      if (hit.type === "text" && lastTap.obj === hit && now - lastTap.t < 400) {
+        lastTap = { t: 0, obj: null }; select(hit); editSelectedText(); gesture = null; return;
+      }
+      lastTap = { t: now, obj: hit };
+      select(hit);
       saveUndo();
+      gesture = { type: "move", last: p, moved: false };
+    } else {
+      select(null);
+      gesture = { type: "pan", lastX: e.clientX, lastY: e.clientY };
     }
     return;
   }
-  if (currentTool === "pen") {
-    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-    ctx.strokeStyle = currentColor; ctx.lineWidth = lineWidth;
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+  if (currentTool === "text") {
+    gesture = { type: "tap", x: e.clientX, y: e.clientY, p };
+    return;
   }
-}
 
-function onMove(e) {
-  if (!isDrawing) return;
-  const pos = getPos(e);
-  if (currentTool === "pen") {
-    ctx.lineTo(pos.x, pos.y); ctx.stroke();
-  } else if (currentTool === "arrow" || currentTool === "rect") {
-    ctx.putImageData(undoStack[undoStack.length-1], 0, 0);
-    if (currentTool === "arrow") drawArrow(startX, startY, pos.x, pos.y);
-    else drawRect(startX, startY, pos.x, pos.y);
+  // Zeichenwerkzeuge
+  if (currentTool === "pen") draft = { type: "pen", pts: [[p.x, p.y]], color: currentColor, w: strokeW(lineWidth) };
+  else draft = { type: currentTool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: currentColor, w: strokeW(lineWidth) };
+  gesture = { type: "draw" };
+  render();
+}, { passive: false });
+
+canvas.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) return;
+  e.preventDefault();
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!gesture) return;
+
+  if (gesture.type === "pinch" && pointers.size >= 2) {
+    const st = pinchState(), g = gesture, r = g.r;
+    const k = st.d / g.start.d;
+    const s = Math.min(Math.max(g.view.s * k, 0.05), 20);
+    // Bildpunkt unter dem Startmittelpunkt folgt dem aktuellen Mittelpunkt
+    const ix = (g.start.cx - r.left - g.view.ox) / g.view.s;
+    const iy = (g.start.cy - r.top - g.view.oy) / g.view.s;
+    view = { s, ox: st.cx - r.left - ix * s, oy: st.cy - r.top - iy * s };
+    render(); return;
   }
-}
-
-function onUp(e) {
-  if (!isDrawing) return;
-  isDrawing = false;
-  const pos = getPos(e);
-  if (currentTool === "arrow") {
-    ctx.putImageData(undoStack[undoStack.length-1], 0, 0);
-    drawArrow(startX, startY, pos.x, pos.y);
-  } else if (currentTool === "rect") {
-    ctx.putImageData(undoStack[undoStack.length-1], 0, 0);
-    drawRect(startX, startY, pos.x, pos.y);
+  if (gesture.type === "pan") {
+    view.ox += e.clientX - gesture.lastX; view.oy += e.clientY - gesture.lastY;
+    gesture.lastX = e.clientX; gesture.lastY = e.clientY;
+    render(); return;
   }
-  saveUndo();
-}
+  const p = toImg(e.clientX, e.clientY);
+  if (gesture.type === "move" && selected) {
+    moveObj(selected, p.x - gesture.last.x, p.y - gesture.last.y);
+    gesture.last = p; gesture.moved = true;
+    render(); return;
+  }
+  if (gesture.type === "draw" && draft) {
+    if (draft.type === "pen") draft.pts.push([p.x, p.y]);
+    else { draft.x2 = p.x; draft.y2 = p.y; }
+    render();
+  }
+}, { passive: false });
 
-function drawArrow(x1, y1, x2, y2) {
-  const dx = x2 - x1, dy = y2 - y1;
-  const len = Math.hypot(dx, dy);
-  if (len < 5) return;
-  const headLen = Math.min(60, len * 0.35);
-  const angle = Math.atan2(dy, dx);
-  ctx.save();
-  ctx.strokeStyle = currentColor; ctx.fillStyle = currentColor;
-  ctx.lineWidth = lineWidth; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI/6), y2 - headLen * Math.sin(angle - Math.PI/6));
-  ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI/6), y2 - headLen * Math.sin(angle + Math.PI/6));
-  ctx.closePath(); ctx.fill();
-  ctx.restore();
-}
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (!gesture) return;
 
-function drawRect(x1, y1, x2, y2) {
-  ctx.save();
-  ctx.strokeStyle = currentColor; ctx.lineWidth = lineWidth;
-  ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-  ctx.restore();
+  if (gesture.type === "pinch") {
+    // erst beenden, wenn alle Finger weg sind (kein versehentliches Zeichnen)
+    if (pointers.size === 0) gesture = null;
+    return;
+  }
+  if (gesture.type === "move") {
+    if (!gesture.moved) undoStack.pop();   // nur angetippt → kein Undo-Eintrag
+    gesture = null; render(); return;
+  }
+  if (gesture.type === "tap" && e.type === "pointerup") {
+    const g = gesture; gesture = null;
+    if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > 15) return;
+    const hit = hitTest(g.p);
+    if (hit && hit.type === "text") { select(hit); editSelectedText(); return; }
+    const txt = prompt("Text eingeben:");
+    if (txt && txt.trim()) {
+      saveUndo();
+      const o = { type: "text", x: g.p.x, y: g.p.y, text: txt, color: currentColor, size: textSize(lineWidth) };
+      objects.push(o);
+      setTool("select");       // danach direkt verschiebbar, kein neuer Text beim nächsten Tippen
+      select(o);
+    }
+    return;
+  }
+  if (gesture.type === "draw" && draft && e.type === "pointerup") {
+    const d = draft;
+    const tooSmall = d.type !== "pen" && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) < 8 / view.s;
+    if (!tooSmall) { saveUndo(); objects.push(d); }
+  }
+  draft = null; gesture = null; render();
 }
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
 
-canvas.addEventListener("mousedown",  onDown, { passive: false });
-canvas.addEventListener("mousemove",  onMove, { passive: false });
-canvas.addEventListener("mouseup",    onUp,   { passive: false });
-canvas.addEventListener("touchstart", onDown, { passive: false });
-canvas.addEventListener("touchmove",  onMove, { passive: false });
-canvas.addEventListener("touchend",   onUp,   { passive: false });
+// Mausrad (PC): zoomen um den Mauszeiger
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k = Math.exp(-e.deltaY * 0.0015);
+  const s = Math.min(Math.max(view.s * k, 0.05), 20);
+  view.ox = mx - (mx - view.ox) * (s / view.s);
+  view.oy = my - (my - view.oy) * (s / view.s);
+  view.s = s; render();
+}, { passive: false });
+
+// Entf-Taste (PC)
+document.addEventListener("keydown", e => {
+  if (!modal.classList.contains("open")) return;
+  if ((e.key === "Delete" || e.key === "Backspace") && selected) { e.preventDefault(); deleteSelected(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undoAnnotation(); }
+});
+// iOS: Safari-eigenes Pinch-Zoom im Editor unterdrücken
+["gesturestart", "gesturechange"].forEach(t => modal.addEventListener(t, e => e.preventDefault()));
 
 // ── INIT ─────────────────────────────────────
 initMsal();
